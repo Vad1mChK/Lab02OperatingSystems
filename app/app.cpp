@@ -1,6 +1,7 @@
+#include "lab2_library.hpp"
 #include <iostream>
+#include <cstring>
 
 int main() {
-    std::cout << "Hello world from app.cpp" << std::endl;
     return 0;
 }
