@@ -4,8 +4,6 @@
 #include <string>
 #include <sys/types.h>
 
-#define LAB2_DEFAULT_BLOCK_SIZE 4096
-
 typedef int fd_t; // File descriptor
 
 typedef std::chrono::duration<std::nano> access_hint_t;
