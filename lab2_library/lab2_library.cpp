@@ -40,11 +40,11 @@ fd_t lab2_open(const std::string& path) {
     }
 
     // Initialize file state with a cache
-    FileState file_state = {
-        .real_fd = real_fd,
-        .position = 0,
-        .cache = ClockCache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) // Example: 16-page cache
-    };
+    FileState file_state = FileState(
+        real_fd,
+        LAB2_NUM_PAGES,
+        LAB2_DEFAULT_BLOCK_SIZE
+    );
 
     fd_t custom_fd = next_fd++;
     open_files[custom_fd] = file_state;
