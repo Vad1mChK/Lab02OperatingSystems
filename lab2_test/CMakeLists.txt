@@ -17,11 +17,3 @@ target_link_libraries(lab2_test
 # Automatically discover tests
 include(GoogleTest)
 gtest_discover_tests(lab2_test)
-
-# Temporary solution to a temporary problem
-# Add tests manually to CTest
-add_test(NAME Lab2Library_OpenAndCloseFile COMMAND lab2_test --gtest_filter=Lab2LibrarySmokeTest.OpenAndCloseFile)
-add_test(NAME Lab2Library_ReadFile COMMAND lab2_test --gtest_filter=Lab2LibrarySmokeTest.ReadFile)
-add_test(NAME Lab2Library_WriteFile COMMAND lab2_test --gtest_filter=Lab2LibrarySmokeTest.WriteFile)
-add_test(NAME Lab2Library_SeekAndWriteFile COMMAND lab2_test --gtest_filter=Lab2LibrarySmokeTest.SeekAndWriteFile)
-add_test(NAME Lab2Library_FsyncTest COMMAND lab2_test --gtest_filter=Lab2LibrarySmokeTest.FsyncTest)
