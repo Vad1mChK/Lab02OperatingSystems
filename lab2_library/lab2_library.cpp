@@ -8,11 +8,25 @@
 #include <unordered_map>
 #include <sys/stat.h>
 
+#include "util.hpp"
+
 // Structure to store file-specific metadata
 struct FileState {
     fd_t real_fd;        // Real file descriptor
     off_t position;      // Current file position
     ClockCache cache;    // Cache for this file
+
+    // Default constructor (required for std::unordered_map)
+    FileState()
+        : real_fd(-1),                          // Invalid default file descriptor
+          position(0),                          // Default position
+          cache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) {} // Default ClockCache (16 pages, 4KB each)
+
+    // Parameterized constructor
+    FileState(fd_t fd, size_t num_pages, size_t page_size)
+        : real_fd(fd),
+          position(0),
+          cache(num_pages, page_size) {}
 };
 
 // Global map for open files
@@ -29,7 +43,7 @@ fd_t lab2_open(const std::string& path) {
     FileState file_state = {
         .real_fd = real_fd,
         .position = 0,
-        .cache = ClockCache(16, LAB2_DEFAULT_BLOCK_SIZE) // Example: 16-page cache
+        .cache = ClockCache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) // Example: 16-page cache
     };
 
     fd_t custom_fd = next_fd++;
@@ -171,5 +185,5 @@ int lab2_fsync(fd_t fd) {
 
 int lab2_advice(int fd, off_t offset, access_hint_t hint) {
     // Not implemented
-    return -1;
+    return TODO(int);
 }

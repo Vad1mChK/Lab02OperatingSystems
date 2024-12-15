@@ -8,6 +8,7 @@
 #include "types.hpp"
 
 #define LAB2_DEFAULT_BLOCK_SIZE 4096
+#define LAB2_NUM_PAGES 16
 
 typedef std::chrono::duration<std::nano> access_hint_t;
 // access hint is absolute time or a time interval that will help define time for next data access
