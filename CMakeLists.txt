@@ -9,6 +9,4 @@ project(Lab02OperatingSystems
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-# Добавляем поддиректории
-add_subdirectory(lab2_library)
 add_subdirectory(app)
