@@ -1,6 +1,9 @@
 # Locate Google Test
 find_package(GTest REQUIRED)
 
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsanitize=address -g")
+set(CMAKE_LINKER_FLAGS "${CMAKE_LINKER_FLAGS} -fsanitize=address")
+
 # Add lab2_test executable
 add_executable(lab2_test
         TestMain.cpp

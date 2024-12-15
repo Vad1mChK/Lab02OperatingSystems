@@ -8,49 +8,64 @@
 #include <unordered_map>
 #include <sys/stat.h>
 
+#include "permissions.hpp"
 #include "util.hpp"
 
-// Structure to store file-specific metadata
 struct FileState {
-    fd_t real_fd;        // Real file descriptor
-    off_t position;      // Current file position
-    ClockCache cache;    // Cache for this file
+    fd_t real_fd;
+    off_t position;
+    ClockCache cache;
 
-    // Default constructor (required for std::unordered_map)
+    // Default constructor
     FileState()
-        : real_fd(-1),                          // Invalid default file descriptor
-          position(0),                          // Default position
-          cache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) {} // Default ClockCache (16 pages, 4KB each)
+        : real_fd(-1),                // Invalid default file descriptor
+          position(0),                // Default position
+          cache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) // Default cache: 16 pages of block size
+    {}
 
-    // Parameterized constructor
+    // Default constructor
     FileState(fd_t fd, size_t num_pages, size_t page_size)
-        : real_fd(fd),
-          position(0),
-          cache(num_pages, page_size) {}
+        : real_fd(fd), position(0), cache(num_pages, page_size) {}
+
+    // Delete copy constructor and assignment operator
+    FileState(const FileState&) = delete;
+    FileState& operator=(const FileState&) = delete;
+
+    // Allow move semantics
+    FileState(FileState&&) = default;
+    FileState& operator=(FileState&&) = default;
+
+    // Destructor
+    ~FileState() = default;
 };
+
 
 // Global map for open files
 std::unordered_map<fd_t, FileState> open_files;
 fd_t next_fd = 1; // Custom file descriptor counter
 
 fd_t lab2_open(const std::string& path) {
+    // Open the real file with O_DIRECT for direct I/O
     int real_fd = open(path.c_str(), O_RDWR | O_DIRECT | O_CREAT, 0644);
     if (real_fd < 0) {
         throw std::system_error(errno, std::generic_category(), "Failed to open file");
     }
 
-    // Initialize file state with a cache
-    FileState file_state = FileState(
-        real_fd,
-        LAB2_NUM_PAGES,
-        LAB2_DEFAULT_BLOCK_SIZE
-    );
+    // Construct FileState for the file descriptor
+    try {
+        fd_t custom_fd = next_fd++; // Get a unique custom FD
 
-    fd_t custom_fd = next_fd++;
-    open_files[custom_fd] = file_state;
+        // Use emplace to construct FileState directly in the map
+        open_files.emplace(custom_fd, FileState(real_fd, 16, LAB2_DEFAULT_BLOCK_SIZE));
 
-    return custom_fd;
+        return custom_fd;
+    } catch (...) {
+        // If an exception occurs (e.g., std::bad_alloc), close the real file descriptor to avoid leaks
+        close(real_fd);
+        throw; // Re-throw the exception after cleanup
+    }
 }
+
 
 int lab2_close(fd_t fd) {
     if (open_files.find(fd) == open_files.end()) {

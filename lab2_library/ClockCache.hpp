@@ -23,6 +23,14 @@ public:
     void evict_page();                       // Evict a page using the Clock Algorithm
     void mark_page_dirty(off_t file_offset);
     void invoke_for_each_dirty_page(const std::function<void(CachePage&)>& callback);
+
+    // Delete copy and assignment
+    ClockCache(const ClockCache&) = delete;
+    ClockCache& operator=(const ClockCache&) = delete;
+
+    // If needed, allow moves
+    ClockCache(ClockCache&&) = default;
+    ClockCache& operator=(ClockCache&&) = default;
 };
 
 #endif //CLOCKCACHE_HPP

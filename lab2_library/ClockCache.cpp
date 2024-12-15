@@ -23,7 +23,10 @@ ClockCache::ClockCache(size_t num_pages, size_t page_size)
 
 ClockCache::~ClockCache() {
     for (auto& page : pages) {
-        free(page.data);
+        if (page.data) {
+            free(page.data);
+            page.data = nullptr;
+        }
     }
 }
 

@@ -22,6 +22,6 @@ ssize_t lab2_read(fd_t fd, void* buf, ssize_t count);
 ssize_t lab2_write(fd_t fd, const void* buf, ssize_t count);
 off_t lab2_lseek(fd_t fd, off_t offset, int whence);
 int lab2_fsync(fd_t fd);
-int lab2_advice(int fd, off_t offset, access_hint_t hint); // Not needed for now
+int lab2_advice(int fd, off_t offset, access_hint_t hint); // Too complex for my insomniac brain sorry
 
 #endif //LAB2_LIBRARY_HPP
