@@ -6,8 +6,8 @@ int main() {
     try {
         fd_t fd = lab2_open("testfile.txt");
 
-        char write_data[4096];
-        for (size_t i = 0; i < 4096; ++i) {
+        char write_data[64];
+        for (size_t i = 0; i < 64; ++i) {
             write_data[i] = (i % 32 == 31) ? '\n' : (i & 1) ? 'H' : 'h';
         }
 

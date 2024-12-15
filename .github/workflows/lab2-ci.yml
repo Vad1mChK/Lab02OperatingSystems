@@ -1,0 +1,47 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - lab2
+  pull_request:
+    branches:
+      - master
+      - lab2
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Install dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libgtest-dev
+
+      # Build Google Test
+      - name: Build Google Test
+        run: |
+          cd /usr/src/gtest
+          sudo cmake .
+          sudo make
+          sudo cp libgtest*.a /usr/lib
+
+      # Create and build the project
+      - name: Configure and Build Project
+        run: |
+          mkdir -p build
+          cd build
+          cmake ..
+          make
+
+      # Run tests
+      - name: Run Tests
+        run: |
+          cd build
+          ctest --output-on-failure
