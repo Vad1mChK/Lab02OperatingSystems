@@ -1,5 +1,3 @@
-# tests/CMakeLists.txt
-
 # Locate Google Test
 find_package(GTest REQUIRED)
 
@@ -16,5 +14,6 @@ target_link_libraries(lab2_test
         GTest::Main
 )
 
-# Add the lab2_test executable to CTest
-add_test(NAME AllTests COMMAND lab2_test)
+# Automatically discover tests
+include(GoogleTest)
+gtest_discover_tests(lab2_test)
