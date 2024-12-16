@@ -6,5 +6,6 @@
 #define TYPES_HPP
 
 typedef int fd_t;
+typedef long access_hint_t;
 
 #endif //TYPES_HPP

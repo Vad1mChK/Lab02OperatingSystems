@@ -1,204 +1,179 @@
 #include "lab2_library.hpp"
 #include "ClockCache.hpp"
-#include <fcntl.h>
-#include <unistd.h>
-#include <iostream>
-#include <cstring>
-#include <system_error>
-#include <unordered_map>
-#include <sys/stat.h>
 
-#include "permissions.hpp"
-#include "util.hpp"
+#include <unordered_map>
+#include <memory>
+#include <system_error>
+#include <cerrno>
+#include <unistd.h>
+#include <fcntl.h>
+#include <cstdio>
+#include <cstring>
+#include <stdexcept>
 
 struct FileState {
-    fd_t real_fd;
+    int real_fd;
     off_t position;
-    ClockCache cache;
+    std::unique_ptr<ClockCache> cache;
 
-    // Default constructor
-    FileState()
-        : real_fd(-1),                // Invalid default file descriptor
-          position(0),                // Default position
-          cache(LAB2_NUM_PAGES, LAB2_DEFAULT_BLOCK_SIZE) // Default cache: 16 pages of block size
-    {}
+    FileState(int fd, size_t pages, size_t psize)
+        : real_fd(fd), position(0), cache(std::make_unique<ClockCache>(pages, psize)) {}
 
-    // Default constructor
-    FileState(fd_t fd, size_t num_pages, size_t page_size)
-        : real_fd(fd), position(0), cache(num_pages, page_size) {}
-
-    // Delete copy constructor and assignment operator
+    // Удаляем копирование
     FileState(const FileState&) = delete;
     FileState& operator=(const FileState&) = delete;
 
-    // Allow move semantics
+    // Позволяем перемещение
     FileState(FileState&&) = default;
     FileState& operator=(FileState&&) = default;
-
-    // Destructor
-    ~FileState() = default;
 };
 
+static std::unordered_map<int, std::unique_ptr<FileState>> open_files;
+static int next_fd = 1;
+static const size_t PAGE_SIZE = 4096;
+static const size_t CACHE_PAGES = 16;
 
-// Global map for open files
-std::unordered_map<fd_t, FileState> open_files;
-fd_t next_fd = 1; // Custom file descriptor counter
-
-fd_t lab2_open(const std::string& path) {
-    // Open the real file with O_DIRECT for direct I/O
-    int real_fd = open(path.c_str(), O_RDWR | O_DIRECT | O_CREAT, 0644);
-    if (real_fd < 0) {
-        throw std::system_error(errno, std::generic_category(), "Failed to open file");
-    }
-
-    // Construct FileState for the file descriptor
-    try {
-        fd_t custom_fd = next_fd++; // Get a unique custom FD
-
-        // Use emplace to construct FileState directly in the map
-        open_files.emplace(custom_fd, FileState(real_fd, 16, LAB2_DEFAULT_BLOCK_SIZE));
-
-        return custom_fd;
-    } catch (...) {
-        // If an exception occurs (e.g., std::bad_alloc), close the real file descriptor to avoid leaks
-        close(real_fd);
-        throw; // Re-throw the exception after cleanup
-    }
-}
-
-
-int lab2_close(fd_t fd) {
-    if (open_files.find(fd) == open_files.end()) {
-        errno = EBADF;
+int lab2_open(const std::string &path) {
+    int fd = ::open(path.c_str(), O_RDWR | O_DIRECT | O_CREAT, 0644);
+    if (fd < 0) {
+        perror("open");
         return -1;
     }
 
-    FileState& file_state = open_files[fd];
-    lab2_fsync(fd); // Sync data before closing
-    close(file_state.real_fd);
-    open_files.erase(fd);
+    // Создаём FileState и добавляем в open_files
+    auto fs = std::make_unique<FileState>(fd, CACHE_PAGES, PAGE_SIZE);
+    int user_fd = next_fd++;
+    open_files.emplace(user_fd, std::move(fs));
+    return user_fd;
+}
 
+int lab2_close(fd_t fd) {
+    auto it = open_files.find(fd);
+    if (it == open_files.end()) {
+        errno = EBADF;
+        return -1;
+    }
+    // Синхронизируем данные
+    lab2_fsync(fd);
+    ::close(it->second->real_fd);
+    open_files.erase(it);
     return 0;
 }
 
-ssize_t lab2_read(fd_t fd, void* buf, ssize_t count) {
-    if (open_files.find(fd) == open_files.end()) {
-        errno = EBADF;
-        return -1;
-    }
-
-    FileState& file_state = open_files[fd];
-    ssize_t bytes_read = 0;
-    char* buffer = static_cast<char*>(buf);
-
-    while (count > 0) {
-        off_t page_offset = file_state.position / LAB2_DEFAULT_BLOCK_SIZE * LAB2_DEFAULT_BLOCK_SIZE;
-        size_t page_offset_within = file_state.position % LAB2_DEFAULT_BLOCK_SIZE;
-        size_t to_read = std::min(static_cast<size_t>(count), LAB2_DEFAULT_BLOCK_SIZE - page_offset_within);
-
-        char* page_data = file_state.cache.get_page(file_state.real_fd, page_offset);
-        std::memcpy(buffer, page_data + page_offset_within, to_read);
-
-        buffer += to_read;
-        bytes_read += to_read;
-        count -= to_read;
-        file_state.position += to_read;
-    }
-
-    return bytes_read;
-}
-
-ssize_t lab2_write(fd_t fd, const void* buf, ssize_t count) {
-    if (open_files.find(fd) == open_files.end()) {
-        errno = EBADF;
-        return -1;
-    }
-
-    FileState& file_state = open_files[fd];
-    ssize_t bytes_written = 0;
-    const char* buffer = static_cast<const char*>(buf);
-
-    while (count > 0) {
-        off_t page_offset = file_state.position / LAB2_DEFAULT_BLOCK_SIZE * LAB2_DEFAULT_BLOCK_SIZE;
-        size_t page_offset_within = file_state.position % LAB2_DEFAULT_BLOCK_SIZE;
-        size_t to_write = std::min(static_cast<size_t>(count), LAB2_DEFAULT_BLOCK_SIZE - page_offset_within);
-
-        char* page_data = file_state.cache.get_page(file_state.real_fd, page_offset);
-        std::memcpy(page_data + page_offset_within, buffer, to_write);
-
-        file_state.cache.mark_page_dirty(page_offset);
-
-        buffer += to_write;
-        bytes_written += to_write;
-        count -= to_write;
-        file_state.position += to_write;
-    }
-
-    return bytes_written;
-}
-
-off_t lab2_lseek(fd_t fd, off_t offset, int whence) {
-    if (open_files.find(fd) == open_files.end()) {
-        errno = EBADF;
-        return -1;
-    }
-
-    FileState& file_state = open_files[fd];
-    off_t new_position = 0;
-
-    switch (whence) {
-        case SEEK_SET:
-            new_position = offset;
-            break;
-        case SEEK_CUR:
-            new_position = file_state.position + offset;
-            break;
-        case SEEK_END: {
-            struct stat st;
-            if (fstat(file_state.real_fd, &st) < 0) {
-                return -1;
-            }
-            new_position = st.st_size + offset;
-            break;
-        }
-        default:
-            errno = EINVAL;
-            return -1;
-    }
-
-    if (new_position < 0) {
+ssize_t lab2_read(fd_t fd, void *buf, size_t count) {
+    if (count % PAGE_SIZE != 0) {
         errno = EINVAL;
         return -1;
     }
 
-    file_state.position = new_position;
-    return new_position;
-}
-
-int lab2_fsync(fd_t fd) {
-    if (open_files.find(fd) == open_files.end()) {
+    auto it = open_files.find(fd);
+    if (it == open_files.end()) {
         errno = EBADF;
         return -1;
     }
+    FileState &fs = *(it->second);
 
-    FileState& file_state = open_files[fd];
+    char* out_ptr = static_cast<char*>(buf);
+    size_t to_read = count;
+    ssize_t total_read = 0;
 
-    // Flush all dirty pages using the callback
-    file_state.cache.invoke_for_each_dirty_page([&file_state](CachePage& page) {
-        ssize_t written = pwrite(file_state.real_fd, page.data, LAB2_DEFAULT_BLOCK_SIZE, page.file_offset);
-        if (written < 0) {
-            perror("Error writing dirty page to disk");
-            throw std::runtime_error("Failed to write dirty page to disk"); // Handle the error cleanly
-        }
-        page.dirty = false; // Mark the page as clean
-    });
+    while (to_read > 0) {
+        off_t page_offset = (fs.position / PAGE_SIZE) * PAGE_SIZE;
+        size_t offset_in_page = fs.position % PAGE_SIZE;
+        size_t can_read = PAGE_SIZE - offset_in_page;
+        if (can_read > to_read) can_read = to_read;
 
-    // Call fsync on the real file descriptor to flush to disk
-    return fsync(file_state.real_fd);
+        char *page_data = fs.cache->get_page(fs.real_fd, page_offset, false);
+        memcpy(out_ptr, page_data + offset_in_page, can_read);
+
+        out_ptr += can_read;
+        to_read -= can_read;
+        total_read += can_read;
+        fs.position += can_read;
+    }
+
+    return total_read; // Возвращаем фактически прочитанное количество байт
 }
 
+ssize_t lab2_write(fd_t fd, const void *buf, size_t count) {
+    if (count % PAGE_SIZE != 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    auto it = open_files.find(fd);
+    if (it == open_files.end()) {
+        errno = EBADF;
+        return -1;
+    }
+    FileState &fs = *(it->second);
+
+    const char* in_ptr = static_cast<const char*>(buf);
+    size_t to_write = count;
+    ssize_t total_written = 0;
+
+    while (to_write > 0) {
+        off_t page_offset = (fs.position / PAGE_SIZE) * PAGE_SIZE;
+        size_t offset_in_page = fs.position % PAGE_SIZE;
+        size_t can_write = PAGE_SIZE - offset_in_page;
+        if (can_write > to_write) can_write = to_write;
+
+        char *page_data = fs.cache->get_page(fs.real_fd, page_offset, true);
+        memcpy(page_data + offset_in_page, in_ptr, can_write);
+        fs.cache->mark_page_dirty(page_offset);
+
+        in_ptr += can_write;
+        to_write -= can_write;
+        total_written += can_write;
+        fs.position += can_write;
+    }
+
+    return total_written; // Возвращаем фактически записанное количество байт
+}
+
+off_t lab2_lseek(const fd_t fd, off_t offset, int whence) {
+    const auto it = open_files.find(fd);
+    if (it == open_files.end()) {
+        errno = EBADF;
+        return (off_t)-1;
+    }
+    FileState &fs = *(it->second);
+
+    off_t new_pos;
+    if (whence == SEEK_SET) {
+        new_pos = offset;
+    } else {
+        // Поддерживаем только SEEK_SET
+        fprintf(stderr, "lab2_lseek: Only SEEK_SET is supported\n");
+        errno = EINVAL;
+        return (off_t)-1;
+    }
+
+    if (new_pos < 0) {
+        errno = EINVAL;
+        return (off_t)-1;
+    }
+
+    fs.position = new_pos;
+    return new_pos;
+}
+
+int lab2_fsync(fd_t fd) {
+    auto it = open_files.find(fd);
+    if (it == open_files.end()) {
+        errno = EBADF;
+        return -1;
+    }
+    const FileState &fs = *(it->second);
+    fs.cache->flush_all(fs.real_fd);
+    if (::fsync(fs.real_fd) != 0) {
+        perror("fsync");
+        return -1;
+    }
+    return 0;
+}
 
 int lab2_advice(int fd, off_t offset, access_hint_t hint) {
-    // Not implemented
-    return TODO(int);
+    fprintf(stderr, "lab2_advice: Advice ignored (fd=%d, offset=%ld, hint=%ld)\n", fd, (long)offset, (long)hint);
+    return 0;
 }
