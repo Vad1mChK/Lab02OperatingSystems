@@ -3,8 +3,8 @@
 #include <string>
 #include <sys/types.h>
 
-#include "ClockCache.hpp"
-#include "types.hpp"
+#include "constants.hpp"
+
 
 // Assuming the library will only be used in c++ code, we don't need extern "C" {}
 fd_t lab2_open(const std::string &path);

@@ -6,11 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Указание исходных файлов
 add_library(lab2_library SHARED lab2_library.cpp
-        permissions.hpp
-        util.hpp
-        CachePage.hpp
-        types.hpp
-        ClockCache.cpp
-        ClockCache.hpp
+        todo.hpp
+        constants.hpp
+        Block.hpp
+        BlockCache.hpp
+        BlockCache.cpp
 )
 target_include_directories(lab2_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})

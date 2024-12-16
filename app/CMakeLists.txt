@@ -8,5 +8,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_executable(app app.cpp)
 
 # Указание пути к библиотеке
-target_link_libraries(app PRIVATE lab2_library)
-target_include_directories(app PRIVATE ../lab2_library)  # Путь к заголовочным файлам
+target_link_libraries(app PRIVATE lab2_library useful_library)
+target_link_directories(app PRIVATE lib)
+target_include_directories(app PRIVATE ../lab2_library lib)
