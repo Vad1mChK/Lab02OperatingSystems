@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 
+enable_testing()
+
 project(Lab02OperatingSystems
         VERSION 2024.2.0
         DESCRIPTION "My worst project, I can do better"
