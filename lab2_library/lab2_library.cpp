@@ -22,6 +22,10 @@ fd_t lab2_open(const std::string &path) {
 
     cache = new BlockCache(fd, LAB2_BLOCK_COUNT, LAB2_BLOCK_SIZE);
 
+    if (cache == nullptr) {
+        throw std::runtime_error("Could not create block cache... Dear god.");
+    }
+
     if (cache->get_block_size() == 0) {
         throw std::runtime_error("Block size is zero in lab2_open");
     }
