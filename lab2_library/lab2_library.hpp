@@ -1,10 +1,11 @@
 #ifndef LAB2_LIBRARY_HPP
 #define LAB2_LIBRARY_HPP
+#include <memory>
 #include <string>
 #include <unistd.h>
 #include <unordered_map>
 
-#include "BlockCache.hpp"
+// #include "BlockCache.hpp"
 
 using fd_t = int;
 using access_hint_t = long long;
@@ -15,7 +16,7 @@ class Lab2 {
 public:
     explicit Lab2(size_t cacheCapacity, size_t blockSize);
 
-    ~Lab2() = default;
+    ~Lab2();
 
     fd_t open(const std::string &filename);
 
@@ -33,7 +34,8 @@ public:
 
 private:
     std::unordered_map<fd_t, off_t> fileOffsets_;
-    BlockCache cache_;
+    struct BlockCacheWrapper; // Forward declaration
+    std::unique_ptr<BlockCacheWrapper> cacheWrapper_; // Direct member
 };
 
 #endif //LAB2_LIBRARY_HPP

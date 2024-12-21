@@ -8,7 +8,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_library(lab2_library SHARED
         lab2_library.hpp
         lab2_library.cpp
-        todo.hpp
         constants.hpp
         Block.hpp
         Block.cpp
