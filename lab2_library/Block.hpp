@@ -1,60 +1,35 @@
 #ifndef BLOCK_HPP
 #define BLOCK_HPP
-#include <new>
-#include <stdlib.h>
-#include <sys/types.h>
 
-#include "constants.hpp"
+#include <cstddef>
+#include <memory>
 
-struct Block {
-    fd_t fd;
-    off_t offset;
-    size_t size;
-    bool reference;
-    bool dirty;
-    bool valid;
-    char* data = nullptr;
+class Block {
+public:
+    Block(std::size_t blockSize, off_t blockIndex);
+    ~Block();
 
-    Block(fd_t fd, off_t offset, size_t size):
-        fd(fd), offset(offset), size(size), reference(false), dirty(false), valid(false) {
-        if (posix_memalign(reinterpret_cast<void**>(&data), LAB2_BLOCK_SIZE, size) != 0) {
-            throw std::bad_alloc();
-        }
-    }
+    // Accessors
+    void* data() { return data_.get(); }
+    const void* data() const { return data_.get(); }
 
-    ~Block() {
-        if (data) {
-            free(data);
-            data = nullptr;
-        }
-    }
+    bool isDirty() const { return dirty_; }
+    bool referenceBit() const { return referenceBit_; }
+    off_t index() const { return blockIndex_; }
 
-    // Delete copy constructor and copy assignment operator
-    Block(const Block&) = delete;
-    Block& operator=(const Block&) = delete;
+    void setDirty(bool d) { dirty_ = d; }
+    void setReferenceBit(bool b) { referenceBit_ = b; }
 
-    // Allow move constructor
-    Block(Block&& other) noexcept:
-        fd(other.fd), offset(other.offset), size(other.size),
-        reference(other.reference), dirty(other.dirty), valid(other.valid), data(other.data) {
-        other.data = nullptr;  // Transfer ownership of data
-    }
+private:
+    off_t blockIndex_;
+    bool dirty_;
+    bool referenceBit_;
+    // Aligned memory
+    std::unique_ptr<unsigned char[], void(*)(void*)> data_;
+    // Could store blockSize_ if needed
 
-    // Allow move assignment operator
-    Block& operator=(Block&& other) noexcept {
-        if (this != &other) {
-            free(data);  // Free existing data
-            fd = other.fd;
-            offset = other.offset;
-            size = other.size;
-            reference = other.reference;
-            dirty = other.dirty;
-            valid = other.valid;
-            data = other.data;
-            other.data = nullptr;  // Transfer ownership of data
-        }
-        return *this;
-    }
+    // Helper for allocation
+    static void deleter(void* p) { ::free(p); }
 };
 
 #endif //BLOCK_HPP

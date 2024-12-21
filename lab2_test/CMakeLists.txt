@@ -17,6 +17,10 @@ target_link_libraries(lab2_test
         GTest::Main
 )
 
+add_compile_options(lab2_test
+        -fsanitize-address
+)
+
 # Automatically discover tests
 include(GoogleTest)
 gtest_discover_tests(lab2_test)

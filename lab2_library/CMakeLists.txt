@@ -5,10 +5,13 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
 # Указание исходных файлов
-add_library(lab2_library SHARED lab2_library.cpp
+add_library(lab2_library SHARED
+        lab2_library.hpp
+        lab2_library.cpp
         todo.hpp
         constants.hpp
         Block.hpp
+        Block.cpp
         BlockCache.hpp
         BlockCache.cpp
 )

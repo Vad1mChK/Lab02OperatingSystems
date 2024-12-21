@@ -1,153 +1,193 @@
 #include "lab2_library.hpp"
-
-#include "constants.hpp"
-#include "todo.hpp"
-
 #include <fcntl.h>
 #include <unistd.h>
-#include <stdexcept>
 #include <cstring>
+#include <stdexcept>
+#include <iostream>
+#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "Block.hpp"
-#include "BlockCache.hpp"
-
-BlockCache* cache;
-
-fd_t lab2_open(const std::string &path) {
-    fd_t fd = ::open(path.c_str(), O_RDWR | O_DIRECT | O_CREAT, 0644);
-    if (fd < 0) {
-        perror("open");
-        throw std::runtime_error("Failed to open file");
-    }
-
-    cache = new BlockCache(fd, LAB2_BLOCK_COUNT, LAB2_BLOCK_SIZE);
-
-    if (cache == nullptr) {
-        throw std::runtime_error("Could not create block cache... Dear god.");
-    }
-
-    if (cache->get_block_size() == 0) {
-        throw std::runtime_error("Block size is zero in lab2_open");
-    }
-
-    return fd;
+Lab2::Lab2(size_t cacheCapacity, size_t blockSize)
+    : fileOffsets_()
+      , cache_(cacheCapacity, blockSize) {
+    // Any additional initialization
 }
 
-ssize_t lab2_read(fd_t fd, void *buf, size_t count) {
-    char* out_ptr = static_cast<char*>(buf);
-    ssize_t total_read = 0;
-    size_t block_size = cache->get_block_size();
-    off_t position = cache->get_position();
+fd_t Lab2::open(const std::string &filename) {
+    // Open with O_DIRECT to bypass page cache
+    // (the file must be aligned for reads/writes).
+    // Using O_RDWR for both read & write in this example:
 
-    if (block_size == 0) {
-        throw std::runtime_error("Block size is zero in lab2_read");
+    // Access rights for file if creating a new file. E.g. 0644 = rw-r--r--
+    constexpr int ACCESS_RIGHTS = 0644;
+    int realFd = ::open(filename.c_str(), O_RDWR | O_DIRECT | O_CREAT, ACCESS_RIGHTS);
+    if (realFd < 0) {
+        // In production code, handle errors properly (set errno, throw, etc.)
+        std::cerr << "Failed to open file: " << filename << "\n";
+        return -1;
     }
 
-    while (count > 0) {
-        off_t block_offset = (position / block_size) * block_size;
-        size_t offset_in_block = position % block_size;
-        size_t to_read = std::min(block_size - offset_in_block, count);
-
-        Block* block = cache->get_block(block_offset, false); // Read block
-        std::memcpy(out_ptr, block->data + offset_in_block, to_read);
-
-        out_ptr += to_read;
-        count -= to_read;
-        total_read += to_read;
-        position += to_read;
-    }
-
-    cache->set_position(position); // Update position in cache
-    return total_read;
+    // Initialize the file offset to 0
+    fileOffsets_[realFd] = 0;
+    return realFd; // Return the same as "fake fd" for simplicity
 }
 
-ssize_t lab2_write(fd_t fd, const void *buf, size_t count) {
-    const char* in_ptr = static_cast<const char*>(buf);
-    ssize_t total_written = 0;
-    size_t block_size = cache->get_block_size();
-    off_t position = cache->get_position();
-
-    if (block_size == 0) {
-        throw std::runtime_error("Block size is zero in lab2_write");
+int Lab2::close(fd_t fd) {
+    auto it = fileOffsets_.find(fd);
+    if (it == fileOffsets_.end()) {
+        // No such FD
+        errno = EBADF;
+        return -1;
     }
 
-    while (count > 0) {
-        off_t block_offset = (position / block_size) * block_size;
-        size_t offset_in_block = position % block_size;
-        size_t to_write = std::min(block_size - offset_in_block, count);
+    // Make sure to flush blocks belonging to this fd
+    fsync(fd);
 
-        Block* block = cache->get_block(block_offset, true); // Write block
-        std::memcpy(block->data + offset_in_block, in_ptr, to_write);
-        block->dirty = true; // Mark block as dirty
-
-        in_ptr += to_write;
-        count -= to_write;
-        total_written += to_write;
-        position += to_write;
-    }
-
-    cache->set_position(position); // Update position in cache
-    return total_written;
+    fileOffsets_.erase(it);
+    return ::close(fd);
 }
 
-off_t lab2_lseek(fd_t fd, off_t offset, int whence) {
-    off_t new_position;
+ssize_t Lab2::read(fd_t fd, void *buf, size_t count) {
+    auto it = fileOffsets_.find(fd);
+    if (it == fileOffsets_.end()) {
+        errno = EBADF;
+        return -1;
+    }
+
+    off_t &offset = it->second; // Current offset in the file
+    size_t bytesRead = 0;
+    char *outPtr = static_cast<char *>(buf);
+
+    while (bytesRead < count) {
+        // Calculate which block we need to read
+        off_t blockIndex = offset / cache_.blockSize();
+        size_t offsetInBlock = offset % cache_.blockSize();
+
+        // Amount we can read from this block
+        size_t canRead = cache_.blockSize() - offsetInBlock;
+        size_t left = count - bytesRead;
+        size_t toReadNow = (left < canRead) ? left : canRead;
+
+        // Fetch data from the cache (which might load from disk)
+        bool success = cache_.readBlock(fd, blockIndex);
+        if (!success) {
+            // Error reading the block from disk
+            return -1;
+        }
+        // Copy from cache to user buffer
+        const char *blockData = static_cast<const char *>(cache_.blockData(fd, blockIndex));
+        if (!blockData) {
+            // Something is wrong, e.g. block not found
+            return -1;
+        }
+
+        std::memcpy(outPtr + bytesRead,
+                    blockData + offsetInBlock,
+                    toReadNow);
+
+        // Update counters
+        bytesRead += toReadNow;
+        offset += toReadNow;
+    }
+
+    return bytesRead;
+}
+
+ssize_t Lab2::write(fd_t fd, const void *buf, size_t count) {
+    auto it = fileOffsets_.find(fd);
+    if (it == fileOffsets_.end()) {
+        errno = EBADF;
+        return -1;
+    }
+
+    off_t &offset = it->second;
+    size_t bytesWritten = 0;
+    const char *inPtr = static_cast<const char *>(buf);
+
+    while (bytesWritten < count) {
+        off_t blockIndex = offset / cache_.blockSize();
+        size_t offsetInBlock = offset % cache_.blockSize();
+
+        size_t canWrite = cache_.blockSize() - offsetInBlock;
+        size_t left = count - bytesWritten;
+        size_t toWriteNow = (left < canWrite) ? left : canWrite;
+
+        // Fetch the block in case we need partial update, or we do read-modify-write
+        if (!cache_.readBlock(fd, blockIndex)) {
+            // Could not load block
+            return -1;
+        }
+        // Mark block as "dirty" after we copy data in
+        char *blockData = static_cast<char *>(cache_.blockData(fd, blockIndex));
+        if (!blockData) {
+            // Something is wrong
+            return -1;
+        }
+
+        // Copy user data to cache
+        std::memcpy(blockData + offsetInBlock,
+                    inPtr + bytesWritten,
+                    toWriteNow);
+
+        cache_.markDirty(fd, blockIndex); // Mark as dirty in the cache
+
+        bytesWritten += toWriteNow;
+        offset += toWriteNow;
+    }
+
+    return bytesWritten;
+}
+
+off_t Lab2::lseek(fd_t fd, off_t offset, int whence) {
+    auto it = fileOffsets_.find(fd);
+    if (it == fileOffsets_.end()) {
+        errno = EBADF;
+        return static_cast<off_t>(-1);
+    }
+
+    off_t newOffset = 0;
 
     if (whence == SEEK_SET) {
-        new_position = offset; // Set absolute position
+        newOffset = offset;
     } else if (whence == SEEK_CUR) {
-        new_position = cache->get_position() + offset; // Adjust relative to current position
+        newOffset = it->second + offset;
     } else if (whence == SEEK_END) {
-        off_t file_size = ::lseek(fd, 0, SEEK_END);
-        if (file_size < 0) {
-            perror("lseek");
-            throw std::runtime_error("Failed to get file size");
+        // We need to know the file's actual size
+        // Temporarily get the OS's idea of file size
+        off_t fileSize = ::lseek(fd, 0, SEEK_END);
+        if (fileSize == static_cast<off_t>(-1)) {
+            // Error
+            return static_cast<off_t>(-1);
         }
-        new_position = file_size + offset;
+        newOffset = fileSize + offset;
     } else {
-        throw std::invalid_argument("Invalid whence value for lseek");
+        errno = EINVAL;
+        return static_cast<off_t>(-1);
     }
 
-    if (new_position < 0) {
-        throw std::invalid_argument("Invalid seek position");
+    if (newOffset < 0) {
+        errno = EINVAL;
+        return static_cast<off_t>(-1);
     }
 
-    cache->set_position(new_position); // Update position in cache
-    return new_position;
+    it->second = newOffset;
+    return newOffset;
 }
 
-int lab2_fsync(fd_t fd) {
-    try {
-        cache->flush_all();
-        if (::fsync(fd) != 0) {
-            perror("fsync");
-            return -1;
-        }
-        return 0;
-    } catch (const std::exception& e) {
-        fprintf(stderr, "fsync error: %s\n", e.what());
+int Lab2::fsync(fd_t fd) {
+    // 1) Flush dirty blocks for this fd in the cache
+    cache_.flushFd(fd);
+
+    // 2) Then call the OS fsync
+    if (::fsync(fd) < 0) {
         return -1;
     }
+    return 0;
 }
 
-int lab2_close(fd_t fd) {
-    try {
-        // Ensure all dirty blocks are flushed to disk
-        if (cache) {
-            cache->flush_all();
-            delete cache; // Free the cache memory
-            cache = nullptr;
-        }
-
-        // Close the file descriptor
-        if (::close(fd) != 0) {
-            perror("close");
-            return -1;
-        }
-
-        return 0; // Success
-    } catch (const std::exception& e) {
-        fprintf(stderr, "close error: %s\n", e.what());
-        return -1;
-    }
+int Lab2::advice(fd_t fd, off_t offset, access_hint_t hint) {
+    // By assignment: not implemented or “tell the user to go away”
+    // We can just return -1 or throw
+    std::cerr << "advice(fd_t, off_t, access_hint_t) not implemented, ignoring hint = " << hint << "\n";
+    return -1;
 }
