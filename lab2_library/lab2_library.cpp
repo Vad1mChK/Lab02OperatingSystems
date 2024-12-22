@@ -30,7 +30,7 @@ fd_t Lab2::open(const std::string &filename) {
 
     // Access rights for file if creating a new file. E.g. 0644 = rw-r--r--
     constexpr int ACCESS_RIGHTS = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    int realFd = ::open(filename.c_str(), O_RDWR | O_DIRECT | O_SYNC | O_CREAT, ACCESS_RIGHTS);
+    int realFd = ::open(filename.c_str(), O_RDWR | O_DIRECT | O_CREAT, ACCESS_RIGHTS);
     if (realFd < 0) {
         // In production code, handle errors properly (set errno, throw, etc.)
         std::cerr << "Failed to open file: " << filename << "\n";
