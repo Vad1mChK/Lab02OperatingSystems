@@ -13,5 +13,6 @@ add_library(lab2_library SHARED
         Block.cpp
         BlockCache.hpp
         BlockCache.cpp
+        CacheKey.hpp
 )
 target_include_directories(lab2_library PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
