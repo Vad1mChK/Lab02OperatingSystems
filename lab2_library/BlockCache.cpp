@@ -18,6 +18,10 @@ BlockCache::BlockCache(std::size_t capacity, std::size_t blockSize)
 //------------------------------------------------------------------------------
 bool BlockCache::readBlock(int fd, off_t blockIndex)
 {
+    if (capacity_ == 0) {
+        throw std::runtime_error("BlockCache capacity is zero; invalid configuration");
+    }
+
     // 1) Check if we already have the block
     std::size_t slot = findSlot(fd, blockIndex);
     if (slot != (std::size_t)-1) {
@@ -99,6 +103,10 @@ void BlockCache::flushFd(int fd)
 //------------------------------------------------------------------------------
 std::size_t BlockCache::evictOne()
 {
+    if (capacity_ == 0) {
+        throw std::runtime_error("BlockCache capacity is zero; invalid configuration");
+    }
+
     // The Clock algorithm:
     // We can attempt up to (2 * capacity_) checks in the worst case
     // (second-chance approach).
@@ -120,7 +128,7 @@ std::size_t BlockCache::evictOne()
                 if (!writeBlockToDisk(entry.fd, *entry.block)) {
                     // If we fail to write, we fail the eviction
                     // In a real system, might do something else
-                    return (std::size_t)-1;
+                    return static_cast<std::size_t>(-1);
                 }
             }
             // Mark slot invalid
@@ -133,10 +141,9 @@ std::size_t BlockCache::evictOne()
             clockHand_ = (clockHand_ + 1) % capacity_;
             return freedSlot;
         }
-        else {
-            // Second chance: set reference bit to false
-            entry.block->setReferenceBit(false);
-        }
+        // Second chance: set reference bit to false
+        entry.block->setReferenceBit(false);
+
         // Move clock hand
         clockHand_ = (clockHand_ + 1) % capacity_;
         checks++;
