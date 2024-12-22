@@ -10,7 +10,7 @@
 using fd_t = int;
 using access_hint_t = long long;
 
-constexpr size_t LAB2_BLOCK_SIZE = 4096;
+constexpr size_t LAB2_BLOCK_SIZE = 0x400000; // 4 MB
 
 class Lab2 {
 public:

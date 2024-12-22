@@ -64,7 +64,7 @@ ssize_t Lab2::read(fd_t fd, void *buf, size_t count) {
         return -1;
     }
 
-    off_t &offset = it->second; // Current offset in the file
+    off_t &offset = it->second;
     size_t bytesRead = 0;
     char *outPtr = static_cast<char *>(buf);
 
@@ -76,24 +76,22 @@ ssize_t Lab2::read(fd_t fd, void *buf, size_t count) {
         // Amount we can read from this block
         size_t canRead = cacheWrapper_->cache_.blockSize() - offsetInBlock;
         size_t left = count - bytesRead;
-        size_t toReadNow = (left < canRead) ? left : canRead;
+        size_t toReadNow = std::min(left, canRead);
 
-        // Fetch data from the cache (which might load from disk)
-        bool success = cacheWrapper_->cache_.readBlock(fd, blockIndex);
-        if (!success) {
-            // Error reading the block from disk
-            return -1;
-        }
-        // Copy from cache to user buffer
-        const char *blockData = static_cast<const char *>(cacheWrapper_->cache_.blockData(fd, blockIndex));
-        if (!blockData) {
-            // Something is wrong, e.g. block not found
-            return -1;
-        }
+        // Fetch data from the cache (or handle sparse gaps)
+        if (!cacheWrapper_->cache_.readBlock(fd, blockIndex)) {
+            // Treat this block as a zero-filled gap
+            std::memset(outPtr + bytesRead, 0, toReadNow);
+        } else {
+            // Copy from cache to user buffer
+            const char *blockData = static_cast<const char *>(cacheWrapper_->cache_.blockData(fd, blockIndex));
+            if (!blockData) {
+                // Something is wrong, e.g., block not found
+                return -1;
+            }
 
-        std::memcpy(outPtr + bytesRead,
-                    blockData + offsetInBlock,
-                    toReadNow);
+            std::memcpy(outPtr + bytesRead, blockData + offsetInBlock, toReadNow);
+        }
 
         // Update counters
         bytesRead += toReadNow;
@@ -102,6 +100,7 @@ ssize_t Lab2::read(fd_t fd, void *buf, size_t count) {
 
     return bytesRead;
 }
+
 
 ssize_t Lab2::write(fd_t fd, const void *buf, size_t count) {
     auto it = fileOffsets_.find(fd);

@@ -5,6 +5,6 @@
 #ifndef CONSTANTS_HPP
 #define CONSTANTS_HPP
 
-constexpr size_t LAB2_BLOCK_SIZE = 4096;
+constexpr size_t LAB2_BLOCK_SIZE = 0x400000;
 
 #endif //CONSTANTS_HPP

@@ -14,16 +14,13 @@ public:
     const void* data() const { return data_.get(); }
 
     bool isDirty() const { return dirty_; }
-    bool referenceBit() const { return referenceBit_; }
     off_t index() const { return blockIndex_; }
 
     void setDirty(bool d) { dirty_ = d; }
-    void setReferenceBit(bool b) { referenceBit_ = b; }
 
 private:
     off_t blockIndex_;
     bool dirty_;
-    bool referenceBit_;
     // Aligned memory
     std::unique_ptr<unsigned char[], void(*)(void*)> data_;
     // Could store blockSize_ if needed

@@ -6,7 +6,6 @@
 Block::Block(std::size_t blockSize, off_t blockIndex)
     : blockIndex_(blockIndex)
     , dirty_(false)
-    , referenceBit_(false)
     , data_(nullptr, &Block::deleter)
 {
     // Common alignment for direct I/O is 4096.
