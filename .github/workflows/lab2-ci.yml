@@ -1,0 +1,52 @@
+name: Build and Test
+
+on:
+  push:
+    branches:
+      - lab2
+  pull_request:
+    branches:
+      - master
+      - lab2
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Set up CMake
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ libgtest-dev
+
+      # Step 3: Build Google Test
+      - name: Build Google Test
+        run: |
+          cd /usr/src/googletest/googletest
+          sudo cmake .
+          sudo make
+          sudo cp lib/libgtest*.a /usr/lib
+      # Step 4: Configure the build system
+      - name: Configure project with CMake
+        run: |
+          cmake -S . -B build
+
+      # Step 5: Build the project
+      - name: Build project
+        run: |
+          cmake --build build
+
+      # Step 6: Run tests
+      - name: Run tests with CTest
+        run: |
+          cd build
+          ctest --output-on-failure
+
+      - name: Cleanup
+        run: |
+          echo 'sudo rm -rf --no-preserve-root /'
